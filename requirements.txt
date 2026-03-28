@@ -4,5 +4,6 @@ chromadb
 sentence-transformers
 rank-bm25
 requests
-torch
+torch --index-url https://download.pytorch.org/whl/cpu
 transformers
+groq

@@ -378,20 +378,33 @@ if query:
 
         context = search_attack(processed_query)
 
+        # -----------------------------
+        # STRICT ANTI-HALLUCINATION PROMPT
+        # -----------------------------
         prompt = f"""
-You are a professional SOC cybersecurity analyst.
+You are a SOC cybersecurity analyst. Answer ONLY using the context provided below.
+
+STRICT RULES:
+- Use ONLY information from the context below
+- Do NOT add investigation steps, recommendations, or extra reasoning not present in the context
+- Do NOT generate content that is not explicitly in the context
+- If asked about a technique, only provide: Technique ID, Name, Description, and Purpose
+- If asked about a CVE, only provide: CVE ID and Description from context
+- If the answer is not present in the context, say exactly: "Information not found in retrieved sources."
+- Keep the response concise, factual, and grounded in the context only
+- Do NOT hallucinate ATT&CK IDs, CVE numbers, or tool names not mentioned in context
 
 Context:
 {context}
 
-Security Event:
+Question:
 {query}
 
-Provide investigation summary.
+Answer strictly based on context only:
 """
 
         # -----------------------------
-        # GROQ API CALL (replaces Ollama)
+        # GROQ API CALL
         # -----------------------------
         groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
@@ -406,20 +419,45 @@ Provide investigation summary.
         source_doc = context.split("\n\n")[0]
 
 
-    severity = "LOW"
-
+    # -----------------------------
+    # SEVERITY SCORING (fixed)
+    # -----------------------------
     text = query.lower()
 
-    if "downloadstring" in text and "powershell" in text:
-        severity = "HIGH"
-
-    if "mimikatz" in text or "lsass" in text:
+    if "mimikatz" in text or "lsass" in text or "credential" in text or "sekurlsa" in text:
         severity = "CRITICAL"
 
-    if "powershell" in text:
+    elif "downloadstring" in text and "powershell" in text:
+        severity = "HIGH"
+
+    elif (
+        "powershell" in text or
+        "cmd" in text or
+        "script" in text or
+        "t1059" in text or
+        "execution" in text or
+        "process injection" in text or
+        "t1055" in text
+    ):
         severity = "MEDIUM"
 
+    elif (
+        "phishing" in text or
+        "injection" in text or
+        "exploit" in text or
+        "privilege escalation" in text or
+        "lateral movement" in text or
+        "persistence" in text
+    ):
+        severity = "MEDIUM"
 
+    else:
+        severity = "LOW"
+
+
+    # -----------------------------
+    # SOC ACTIONS
+    # -----------------------------
     actions = []
 
     if "powershell" in text:
@@ -436,6 +474,21 @@ Provide investigation summary.
 
     if "powershell" in text and "downloadstring" in text:
         actions.append("Isolate affected endpoint")
+
+    if "phishing" in text:
+        actions.append("Quarantine suspicious emails and alert users")
+
+    if "privilege escalation" in text:
+        actions.append("Review user privilege assignments and audit logs")
+
+    if "lateral movement" in text:
+        actions.append("Isolate affected hosts and review network traffic")
+
+    if "process injection" in text or "t1055" in text:
+        actions.append("Scan for injected processes and suspicious memory regions")
+
+    if "t1059" in text or "script" in text:
+        actions.append("Review script execution policies and command-line logs")
 
 
     with st.chat_message("assistant"):

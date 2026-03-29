@@ -1,6 +1,6 @@
 import chromadb
 import re
-from sentence_transformers import SentenceTransformer, CrossEncoder
+from chromadb.utils import embedding_functions
 from rank_bm25 import BM25Okapi
 
 
@@ -9,15 +9,11 @@ from rank_bm25 import BM25Okapi
 # ---------------------------
 client = chromadb.PersistentClient(path="./db")
 
-attack_collection = client.get_collection("security_knowledge")
-cve_collection = client.get_collection("cve_vulnerabilities")
+# Lightweight built-in ONNX embedder (no torch needed)
+ef = embedding_functions.ONNXMiniLM_L6_V2()
 
-
-# ---------------------------
-# Models
-# ---------------------------
-embed_model = SentenceTransformer("all-MiniLM-L6-v2")
-reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+attack_collection = client.get_collection("security_knowledge", embedding_function=ef)
+cve_collection = client.get_collection("cve_vulnerabilities", embedding_function=ef)
 
 
 # ---------------------------
@@ -133,21 +129,16 @@ def search_attack(query):
             return "\n\n".join(results["documents"])
 
 
-    query_type = detect_query_type(query)
-
-    embedding = embed_model.encode(query).tolist()
-
-
     # --------------------------------
-    # Dense retrieval
+    # Dense retrieval (using built-in embedder)
     # --------------------------------
     attack_dense = attack_collection.query(
-        query_embeddings=[embedding],
+        query_texts=[query],
         n_results=5
     )["documents"][0]
 
     cve_dense = cve_collection.query(
-        query_embeddings=[embedding],
+        query_texts=[query],
         n_results=5
     )["documents"][0]
 
@@ -172,7 +163,6 @@ def search_attack(query):
 
         attack_keyword = [attack_docs[i] for i in attack_idx]
 
-
     if bm25_cve:
 
         cve_scores = bm25_cve.get_scores(tokens)
@@ -187,7 +177,7 @@ def search_attack(query):
 
 
     # --------------------------------
-    # Combine results
+    # Combine & deduplicate results
     # --------------------------------
     combined_docs = list(set(
         attack_dense +
@@ -201,30 +191,14 @@ def search_attack(query):
 
 
     # --------------------------------
-    # Reranking
+    # Top documents (no reranker needed)
     # --------------------------------
-    pairs = [(query, doc) for doc in combined_docs]
+    top_docs = combined_docs[:3]
 
-    scores = reranker.predict(pairs)
-
-    ranked_docs = [
-        doc for _, doc in sorted(
-            zip(scores, combined_docs),
-            reverse=True
-        )
-    ]
-
-
-    # --------------------------------
-    # Top documents
-    # --------------------------------
-    top_docs = ranked_docs[:3]
-
-    print("\nTop Ranked Documents:\n")
+    print("\nTop Documents:\n")
 
     for doc in top_docs:
         print("-", doc[:120])
-
 
     context = "\n\n".join(top_docs)
 

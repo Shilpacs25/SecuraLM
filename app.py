@@ -416,7 +416,14 @@ Answer strictly based on context only:
 
         answer = completion.choices[0].message.content
 
-        source_doc = context.split("\n\n")[0]
+        # Smart source selection - prefer ATT&CK over CVE
+        source_doc = ""
+        for doc in context.split("\n\n"):
+            if "Source: MITRE ATT&CK" in doc:
+                source_doc = doc
+                break
+            if not source_doc:
+                source_doc = context.split("\n\n")[0]
 
 
     # -----------------------------

@@ -71,28 +71,33 @@ def detect_query_type(query):
 
     q = query.lower()
 
+    # Only treat as CVE if explicitly asking about a specific CVE
+    # not just mentioning the word "cve"
+    if re.search(r"CVE-\d{4}-\d+", query.upper()):
+        return "cve"
+
     vulnerability_keywords = [
-        "cve", "vulnerability", "exploit", "patch",
-        "nvd", "advisory", "disclosure"
+        "vulnerability", "patch", "nvd",
+        "advisory", "disclosure", "exploit"
     ]
 
     technique_keywords = [
         "attack", "technique", "process injection",
         "phishing", "lateral movement",
         "credential dumping", "persistence",
-        "mitre", "att&ck", "tactic"
+        "mitre", "att&ck", "tactic", "cve or mitre",
+        "mitre attack", "mitre details"
     ]
-
-    for w in vulnerability_keywords:
-        if w in q:
-            return "cve"
 
     for w in technique_keywords:
         if w in q:
             return "attack"
 
-    return "general"
+    for w in vulnerability_keywords:
+        if w in q:
+            return "cve"
 
+    return "general"
 
 # ---------------------------
 # Main Retrieval Function

@@ -394,9 +394,9 @@ Provide investigation summary.
         # GROQ API CALL (replaces Ollama)
         # -----------------------------
         groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-        
+
         completion = groq_client.chat.completions.create(
-            model="llama3-8b-8192",
+            model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=1000
         )

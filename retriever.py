@@ -200,7 +200,7 @@ def search_attack(query):
     # --------------------------------
     # Top documents
     # --------------------------------
-    top_docs = combined_docs[:3]
+    top_docs = combined_docs[:5]
 
     print("\nTop Documents:\n")
 

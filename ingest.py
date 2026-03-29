@@ -1,18 +1,26 @@
 import json
 import chromadb
-from sentence_transformers import SentenceTransformer
+from chromadb.utils import embedding_functions
 
 print("Loading ATT&CK data...")
 
 with open("data/attack.json") as f:
     data = json.load(f)
 
-model = SentenceTransformer("all-MiniLM-L6-v2")
+ef = embedding_functions.ONNXMiniLM_L6_V2()
 
 client = chromadb.PersistentClient(path="./db")
 
+# Delete old collection if exists to avoid conflicts
+try:
+    client.delete_collection("security_knowledge")
+    print("Deleted old security_knowledge collection")
+except:
+    pass
+
 collection = client.get_or_create_collection(
-    name="attack_techniques"
+    name="security_knowledge",
+    embedding_function=ef
 )
 
 texts = []
@@ -57,21 +65,23 @@ Description: {description}
 
     count += 1
 
-print("Creating embeddings...")
+print(f"Adding {count} ATT&CK techniques to ChromaDB...")
 
-embeddings = model.encode(
-    texts,
-    batch_size=32,
-    show_progress_bar=True
-)
+# Add in batches to avoid memory issues
+batch_size = 50
 
-print("Storing ATT&CK techniques...")
+for i in range(0, len(texts), batch_size):
 
-collection.add(
-    documents=texts,
-    embeddings=embeddings.tolist(),
-    metadatas=metadatas,
-    ids=ids
-)
+    batch_texts = texts[i:i+batch_size]
+    batch_meta = metadatas[i:i+batch_size]
+    batch_ids = ids[i:i+batch_size]
+
+    collection.add(
+        documents=batch_texts,
+        metadatas=batch_meta,
+        ids=batch_ids
+    )
+
+    print(f"  Added batch {i//batch_size + 1} / {(len(texts)-1)//batch_size + 1}")
 
 print("Stored", count, "ATT&CK techniques")

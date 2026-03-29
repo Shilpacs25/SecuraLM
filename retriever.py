@@ -71,14 +71,16 @@ def detect_query_type(query):
 
     q = query.lower()
 
+    vulnerability_keywords = [
+        "cve", "vulnerability", "exploit", "patch",
+        "nvd", "advisory", "disclosure"
+    ]
+
     technique_keywords = [
         "attack", "technique", "process injection",
         "phishing", "lateral movement",
-        "credential dumping", "persistence"
-    ]
-
-    vulnerability_keywords = [
-        "cve", "vulnerability", "exploit", "patch"
+        "credential dumping", "persistence",
+        "mitre", "att&ck", "tactic"
     ]
 
     for w in vulnerability_keywords:
@@ -99,11 +101,13 @@ def search_attack(query):
 
     print("\nSearching knowledge base...")
 
-    # --------------------------------
-    # Direct CVE lookup
-    # --------------------------------
+    query_type = detect_query_type(query)
     cve_id = detect_cve_id(query)
+    attack_id = detect_attack_id(query)
 
+    # --------------------------------
+    # Direct CVE lookup (exact match)
+    # --------------------------------
     if cve_id:
 
         print("Direct CVE lookup:", cve_id)
@@ -113,12 +117,9 @@ def search_attack(query):
         if results["documents"]:
             return "\n\n".join(results["documents"])
 
-
     # --------------------------------
-    # Direct ATT&CK lookup
+    # Direct ATT&CK lookup (exact match)
     # --------------------------------
-    attack_id = detect_attack_id(query)
-
     if attack_id:
 
         print("Direct ATT&CK lookup:", attack_id)
@@ -128,23 +129,26 @@ def search_attack(query):
         if results["documents"]:
             return "\n\n".join(results["documents"])
 
-
     # --------------------------------
-    # Dense retrieval (using built-in embedder)
+    # Dense retrieval
+    # Only search CVE collection when query is CVE-related
     # --------------------------------
     attack_dense = attack_collection.query(
         query_texts=[query],
         n_results=5
     )["documents"][0]
 
-    cve_dense = cve_collection.query(
-        query_texts=[query],
-        n_results=5
-    )["documents"][0]
-
+    if query_type == "cve" or cve_id:
+        cve_dense = cve_collection.query(
+            query_texts=[query],
+            n_results=5
+        )["documents"][0]
+    else:
+        cve_dense = []
 
     # --------------------------------
     # BM25 retrieval
+    # Only search CVE BM25 when query is CVE-related
     # --------------------------------
     tokens = query.lower().split()
 
@@ -163,7 +167,7 @@ def search_attack(query):
 
         attack_keyword = [attack_docs[i] for i in attack_idx]
 
-    if bm25_cve:
+    if bm25_cve and (query_type == "cve" or cve_id):
 
         cve_scores = bm25_cve.get_scores(tokens)
 
@@ -174,7 +178,6 @@ def search_attack(query):
         )[:5]
 
         cve_keyword = [cve_docs[i] for i in cve_idx]
-
 
     # --------------------------------
     # Combine & deduplicate results
@@ -189,9 +192,8 @@ def search_attack(query):
     if len(combined_docs) == 0:
         return "No relevant documents found."
 
-
     # --------------------------------
-    # Top documents (no reranker needed)
+    # Top documents
     # --------------------------------
     top_docs = combined_docs[:3]
 
